@@ -16,11 +16,17 @@ def createDataSet(filename):
     print("cols number is: ", ncols)
 
     dataArr = []
+    className = np.array(worksheet.row_values(0))[1:-1]
     for i in range(1, nrows):                           # 第一行为表头，去除
         rowVals = np.array(worksheet.row_values(i))
         dataArr.append(rowVals[1:])                     # 第一列为样本序号，去除
     #print(dataArr)
-    return np.array(dataArr)
+    dataArr = np.array(dataArr)
+    featDict = {}
+    for i in range(len(className)):
+        featDict[className[i]] = np.unique(dataArr[:, i])
+
+    return dataArr, featDict
 
 # 计算信息熵
 def InfoEntropy(dataArr):
@@ -63,12 +69,9 @@ def calcIVa(dataArr):
         IVa.append(np.sum(-1*featValCountArr*np.log2(featValCountArr)))
     return IVa
 
-
-
-
 # 选择最优的feature进行划分，使结果的信息增益最高
 # 返回最优的信息增益、最优的划分特征序号以及划分结果（字典）
-def chooseBestFeatureToSplit(dataArr):
+def chooseBestFeatureToSplit(dataArr, classDict):
     numOfFeature = len(dataArr[0])-1                    # 计算dataArr中Feature的个数，最后一个为label需要减去
     numOfSample = len(dataArr)                          # 计算样本总数，用于计算信息熵
     originInfoEnt = InfoEntropy(dataArr)                # 计算划分之前的信息熵
@@ -86,7 +89,10 @@ def chooseBestFeatureToSplit(dataArr):
             bestFeatIndex = featInd
             bestfeatSpitDict = featSplit
     infoEntGain = originInfoEnt - bestInfoEnt           # 计算最大的信息增益
-    return infoEntGain, bestFeatIndex, bestfeatSpitDict
+    keyList = list(classDict.keys())
+    bestClassName = keyList[bestFeatIndex]              # 返回当作当前数节点的值
+    classDict.pop(bestClassName)
+    return infoEntGain, bestFeatIndex, bestfeatSpitDict, bestClassName, classDict
 
 
 # 选择最优的feature进行划分，使结果的信息增益率最高
@@ -114,13 +120,13 @@ def chooseBestFeatureToSplitGainRatio(dataArr, IVa):
 
 
 # 由信息增益生成决策树
-def DecisionTree(dataArr):
+def DecisionTree(dataArr, classDict):
     myTree = {}
     # (1) D 中样本全属于同一类别 C,将 node 标记为 C 类叶结点
     if len(np.unique(dataArr[:,-1])) == 1:
         return dataArr[0,-1]
     # (2) A=空集 OR D 中样本在 A 上取值相同
-    elif dataArr.shape[1] == 1 or len(np.unique(dataArr[:, :-1], axis=0)) == 1:
+    elif len(classDict) == 0 or len(np.unique(dataArr[:, :-1], axis=0)) == 1:
         # 将 node 标记为叶结点，其类别标记为 D 中样本数最多的类;
         labelCount = {}
         for label in dataArr[:,-1]:
@@ -130,10 +136,11 @@ def DecisionTree(dataArr):
         return max(labelCount, key=labelCount.get)
     # (3) 否则继续进行最优划分，并返回划分的子树
     else:
-        #infoEntGain, bestFeatIndex, bestfeatSplitDict = chooseBestFeatureToSplit(dataArr)
-        bestEntGain, bestFeatIndex, bestfeatSplitDict = chooseBestFeatureToSplit(dataArr)
+        # classDict会相当于引用传参，所以不用返回
+        bestEntGain, bestFeatIndex, bestfeatSplitDict, bestClassName, classDictReturn = chooseBestFeatureToSplit(dataArr, classDict.copy())
+        myTree = {bestClassName:{}}
         for key in bestfeatSplitDict.keys():
-            myTree[key] = DecisionTree(np.array(bestfeatSplitDict[key]))
+            myTree[bestClassName][key] = DecisionTree(np.array(bestfeatSplitDict[key]), classDictReturn.copy())
         return myTree
 
 # 由增益率生成决策树
@@ -153,7 +160,6 @@ def DecisionTreeGainRatio(dataArr, IVa):
         return max(labelCount, key=labelCount.get)
     # (3) 否则继续进行最优划分，并返回划分的子树
     else:
-        #infoEntGain, bestFeatIndex, bestfeatSplitDict = chooseBestFeatureToSplit(dataArr)
         bestGainRatio, bestFeatIndex, bestfeatSplitDict, IVa = chooseBestFeatureToSplitGainRatio(dataArr, IVa)
         for key in bestfeatSplitDict.keys():
             myTree[key] = DecisionTreeGainRatio(np.array(bestfeatSplitDict[key]), IVa)
