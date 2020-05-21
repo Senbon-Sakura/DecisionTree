@@ -12,7 +12,7 @@ def createDataSet(filename):
 
     nrows = worksheet.nrows
     print("rows number is: ", nrows)
-    ncols = worksheet.nrows
+    ncols = worksheet.ncols
     print("cols number is: ", ncols)
 
     dataArr = []
@@ -48,6 +48,23 @@ def splitDataSet(dataArr, featInd):
         featSplit[featVec[featInd]].append(tmp)
     return featSplit
 
+# 计算C.54决策树不同特征值增益率对应的分母IV(a)
+def calcIVa(dataArr):
+    numOfFeat = dataArr.shape[1]-1                      # 计算dataArr中Feature的个数，最后一个为label需要减去
+    numOfSamp = dataArr.shape[0]                        # 计算dataArr中样本个数
+    IVa = []
+    for i in range(numOfFeat):
+        featValCount = {}
+        for featVal in dataArr[:,i]:
+            if featVal not in featValCount.keys():
+                featValCount[featVal] = 0
+            featValCount[featVal] += 1
+        featValCountArr = np.array(list(featValCount.values())) / numOfSamp
+        IVa.append(np.sum(-1*featValCountArr*np.log2(featValCountArr)))
+    return IVa
+
+
+
 
 # 选择最优的feature进行划分，使结果的信息增益最高
 # 返回最优的信息增益、最优的划分特征序号以及划分结果（字典）
@@ -71,7 +88,32 @@ def chooseBestFeatureToSplit(dataArr):
     infoEntGain = originInfoEnt - bestInfoEnt           # 计算最大的信息增益
     return infoEntGain, bestFeatIndex, bestfeatSpitDict
 
-# 生成决策树
+
+# 选择最优的feature进行划分，使结果的信息增益率最高
+# 返回最优的信息增益率、最优的划分特征序号以及划分结果（字典）
+def chooseBestFeatureToSplitGainRatio(dataArr, IVa):
+    numOfFeature = len(dataArr[0])-1                    # 计算dataArr中Feature的个数，最后一个为label需要减去
+    numOfSample = len(dataArr)                          # 计算样本总数，用于计算信息熵
+    originInfoEnt = InfoEntropy(dataArr)                # 计算划分之前的信息熵
+    bestGainRatio = np.inf                              # 保存最佳的信息熵，越小越好
+    bestFeatIndex = 0                                   # 保存最好划分的feature序号
+    bestfeatSpitDict = {}                               # 保存最好划分的划分结果
+    for featInd in range(numOfFeature):                 # 遍历dataArr中的每一个Feature
+        featSplit = splitDataSet(dataArr, featInd)      # 根据当前featInd划分dataArr，返回划分的字典结果
+        infoEnt = 0
+        for key in featSplit.keys():                    # 计算信息熵
+            prob = len(featSplit[key]) / numOfSample
+            infoEnt += prob*InfoEntropy(featSplit[key])
+        gainRatio = (originInfoEnt - infoEnt)/IVa[featInd]
+        if gainRatio < bestGainRatio:                   # 如果新划分的信息熵小于最有信息熵，则将最优结果更新为此次划分结果
+            bestGainRatio = gainRatio
+            bestFeatIndex = featInd
+            bestfeatSpitDict = featSplit
+    IVa = np.hstack((IVa[:featInd], IVa[featInd+1:]))
+    return bestGainRatio, bestFeatIndex, bestfeatSpitDict, IVa
+
+
+# 由信息增益生成决策树
 def DecisionTree(dataArr):
     myTree = {}
     # (1) D 中样本全属于同一类别 C,将 node 标记为 C 类叶结点
@@ -88,7 +130,42 @@ def DecisionTree(dataArr):
         return max(labelCount, key=labelCount.get)
     # (3) 否则继续进行最优划分，并返回划分的子树
     else:
-        infoEntGain, bestFeatIndex, bestfeatSplitDict = chooseBestFeatureToSplit(dataArr)
+        #infoEntGain, bestFeatIndex, bestfeatSplitDict = chooseBestFeatureToSplit(dataArr)
+        bestEntGain, bestFeatIndex, bestfeatSplitDict = chooseBestFeatureToSplit(dataArr)
         for key in bestfeatSplitDict.keys():
             myTree[key] = DecisionTree(np.array(bestfeatSplitDict[key]))
         return myTree
+
+# 由增益率生成决策树
+def DecisionTreeGainRatio(dataArr, IVa):
+    myTree = {}
+    # (1) D 中样本全属于同一类别 C,将 node 标记为 C 类叶结点
+    if len(np.unique(dataArr[:,-1])) == 1:
+        return dataArr[0,-1]
+    # (2) A=空集 OR D 中样本在 A 上取值相同
+    elif dataArr.shape[1] == 1 or len(np.unique(dataArr[:, :-1], axis=0)) == 1:
+        # 将 node 标记为叶结点，其类别标记为 D 中样本数最多的类;
+        labelCount = {}
+        for label in dataArr[:,-1]:
+            if label not in labelCount.keys():
+                labelCount[label] = 0
+            labelCount[label] += 1
+        return max(labelCount, key=labelCount.get)
+    # (3) 否则继续进行最优划分，并返回划分的子树
+    else:
+        #infoEntGain, bestFeatIndex, bestfeatSplitDict = chooseBestFeatureToSplit(dataArr)
+        bestGainRatio, bestFeatIndex, bestfeatSplitDict, IVa = chooseBestFeatureToSplitGainRatio(dataArr, IVa)
+        for key in bestfeatSplitDict.keys():
+            myTree[key] = DecisionTreeGainRatio(np.array(bestfeatSplitDict[key]), IVa)
+        return myTree
+
+def classify(inputTree, testVec):
+    #if len(inputTree) == 1:
+    if isinstance(inputTree, dict):
+        for key in inputTree.keys():
+            for i in range(len(testVec)):
+                if testVec[i] == key:
+                    classify(inputTree[key], np.hstack((testVec[:i], testVec[i+1:])))
+    else:
+        print(inputTree)
+
