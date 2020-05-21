@@ -136,11 +136,21 @@ def DecisionTree(dataArr, classDict):
         return max(labelCount, key=labelCount.get)
     # (3) 否则继续进行最优划分，并返回划分的子树
     else:
-        # classDict会相当于引用传参，所以不用返回
+        # 计算父节点最多的类，当Dv为空时使用
+        freqCount = {}
+        for sampVec in dataArr:
+            if sampVec[-1] not in freqCount:
+                freqCount[sampVec[-1]] = 0
+            freqCount[sampVec[-1]]  += 1
+        maxLab = max(freqCount, key=freqCount.get)
+        # 直接传classDict会相当于引用传参，从而导致程序错误，此处需要进一步斟酌
         bestEntGain, bestFeatIndex, bestfeatSplitDict, bestClassName, classDictReturn = chooseBestFeatureToSplit(dataArr, classDict.copy())
         myTree = {bestClassName:{}}
         for key in bestfeatSplitDict.keys():
             myTree[bestClassName][key] = DecisionTree(np.array(bestfeatSplitDict[key]), classDictReturn.copy())
+        for featVal in classDict[bestClassName]:
+            if featVal not in bestfeatSplitDict.keys():
+                myTree[bestClassName][featVal] = maxLab
         return myTree
 
 # 由增益率生成决策树
