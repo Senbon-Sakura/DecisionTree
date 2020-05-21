@@ -175,6 +175,7 @@ def DecisionTreeGainRatio(dataArr, IVa):
             myTree[key] = DecisionTreeGainRatio(np.array(bestfeatSplitDict[key]), IVa)
         return myTree
 
+'''
 def classify(inputTree, testVec):
     #if len(inputTree) == 1:
     if isinstance(inputTree, dict):
@@ -184,4 +185,21 @@ def classify(inputTree, testVec):
                     classify(inputTree[key], np.hstack((testVec[:i], testVec[i+1:])))
     else:
         print(inputTree)
+'''
+
+def classify(inputTree, featLabels, testVec):
+    keyStr = []
+    for key in inputTree.keys():
+        keyStr.append(key)
+    firstStr = keyStr[0]
+    secondDict = inputTree[firstStr]
+    featIndex = featLabels.index(firstStr)
+    classLabel = ""
+    for key in secondDict.keys():
+        if testVec[featIndex] == key:
+            if type(secondDict[key]).__name__ == 'dict':
+                classLabel = classify(secondDict[key], featLabels, testVec)
+            else:
+                classLabel = secondDict[key]
+    return classLabel
 
