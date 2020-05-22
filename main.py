@@ -5,8 +5,9 @@ import PlotTree as pt
 # classDict为以后决策数节点的字典（划分依据）
 dataArr, classDict = func.createDataSet('西瓜数据集2.0.xlsx')
 print(classDict)
-#myTree = func.DecisionTree(dataArr, classDict)
-myTree = func.DecisionTreeGainRatio(dataArr, classDict)
+myTree = func.DecisionTree(dataArr, classDict)
+#myTree = func.DecisionTreeGainRatio(dataArr, classDict)
+#myTree = func.DecisionTreeGainAndRatio(dataArr, classDict)
 print(myTree)
 pt.create_plot(myTree)
 
