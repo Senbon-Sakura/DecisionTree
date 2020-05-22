@@ -43,6 +43,21 @@ def InfoEntropy(dataArr):
         infoEnt -= prob*np.log2(prob)
     return infoEnt
 
+# 计算Gini(dataArr)
+def calcGini(dataArr):
+    labelCounts = {}
+    numEntries = len(dataArr)
+    gini = 1
+    for featVec in dataArr:
+        currentLabel = featVec[-1]
+        if currentLabel not in labelCounts.keys():
+            labelCounts[currentLabel] = 0
+        labelCounts[currentLabel] += 1
+    for key in labelCounts.keys():
+        prob = labelCounts[key]/numEntries
+        gini -= prob**2
+    return gini
+
 # 根据第i个特征进行划分，返回划分的字典类型
 def splitDataSet(dataArr, featInd):
     numOfFeature = len(dataArr[0])-1                                # 最后一列为label，不是feature
@@ -140,6 +155,30 @@ def chooseBestFeatureToSplitGainRatio(dataArr, classDict, betterFeatIndex=None):
     bestClassName = keyList[bestFeatIndex]              # 返回当作当前数节点的值
     classDict.pop(bestClassName)
     return bestGainRatio, bestFeatIndex, bestfeatSpitDict, bestClassName, classDict
+
+
+# 选择最优的feature进行划分，使结果的基尼指数最低
+# 返回最优的基尼指数、最优的划分特征序号以及划分结果（字典）
+def chooseBestFeatureToSplitGini(dataArr, classDict):
+    numOfFeature = len(dataArr[0])-1                    # 计算dataArr中Feature的个数，最后一个为label需要减去
+    numOfSample = len(dataArr)                          # 计算样本总数，用于计算基尼指数
+    bestGini = np.inf                                   # 保存最佳的基尼指数，越小越好
+    bestFeatIndex = 0                                   # 保存最好划分的feature序号
+    bestfeatSpitDict = {}                               # 保存最好划分的划分结果
+    giniIndDict = []
+    for featInd in range(numOfFeature):                 # 遍历dataArr中的每一个Feature
+        featSplit = splitDataSet(dataArr, featInd)      # 根据当前featInd划分dataArr，返回划分的字典结果
+        giniInd = 0
+        for key in featSplit.keys():                    # 计算Gini Index
+            prob = len(featSplit[key]) / numOfSample
+            giniInd += prob*calcGini(featSplit[key])
+        giniIndDict.append(giniInd)
+    bestFeatIndex = np.argmin(giniIndDict)
+    bestfeatSpitDict = splitDataSet(dataArr, bestFeatIndex)
+    keyList = list(classDict.keys())
+    bestClassName = keyList[bestFeatIndex]              # 返回当作当前数节点的值
+    classDict.pop(bestClassName)
+    return bestFeatIndex, bestfeatSpitDict, bestClassName, classDict
 
 
 # 由信息增益生成决策树
@@ -242,6 +281,41 @@ def DecisionTreeGainAndRatio(dataArr, classDict):
         myTree = {bestClassName: {}}
         for key in bestfeatSplitDict.keys():
             myTree[bestClassName][key] = DecisionTreeGainRatio(np.array(bestfeatSplitDict[key]), classDictReturn)
+        for featVal in classDict[bestClassName]:
+            if featVal not in bestfeatSplitDict.keys():
+                myTree[bestClassName][featVal] = maxLab
+        return myTree
+
+
+# 由Gini Index生成决策树
+def DecisionTreeGiniIndex(dataArr, classDict):
+    myTree = {}
+    # (1) D 中样本全属于同一类别 C,将 node 标记为 C 类叶结点
+    if len(np.unique(dataArr[:,-1])) == 1:
+        return dataArr[0,-1]
+    # (2) A=空集 OR D 中样本在 A 上取值相同
+    elif len(classDict) == 0 or len(np.unique(dataArr[:, :-1], axis=0)) == 1:
+        # 将 node 标记为叶结点，其类别标记为 D 中样本数最多的类;
+        labelCount = {}
+        for label in dataArr[:,-1]:
+            if label not in labelCount.keys():
+                labelCount[label] = 0
+            labelCount[label] += 1
+        return max(labelCount, key=labelCount.get)
+    # (3) 否则继续进行最优划分，并返回划分的子树
+    else:
+        # 计算父节点最多的类，当Dv为空时使用
+        freqCount = {}
+        for sampVec in dataArr:
+            if sampVec[-1] not in freqCount:
+                freqCount[sampVec[-1]] = 0
+            freqCount[sampVec[-1]]  += 1
+        maxLab = max(freqCount, key=freqCount.get)
+        # 直接传classDict会相当于引用传参，从而导致程序错误，此处需要进一步斟酌
+        bestFeatIndex, bestfeatSplitDict, bestClassName, classDictReturn = chooseBestFeatureToSplitGini(dataArr, classDict.copy())
+        myTree = {bestClassName: {}}
+        for key in bestfeatSplitDict.keys():
+            myTree[bestClassName][key] = DecisionTreeGiniIndex(np.array(bestfeatSplitDict[key]), classDictReturn)
         for featVal in classDict[bestClassName]:
             if featVal not in bestfeatSplitDict.keys():
                 myTree[bestClassName][featVal] = maxLab
