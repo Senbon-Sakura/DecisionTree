@@ -385,6 +385,18 @@ def classify(inputTree, featLabels, testVec):
     featIndex = featLabels.index(firstStr)
     classLabel = ""
     for key in secondDict.keys():
+        if key[0] == "<":
+            if float(testVec[featIndex]) < float(key[1:]):
+                if type(secondDict[key]).__name__ == 'dict':
+                    classLabel = classify(secondDict[key], featLabels, testVec)
+                else:
+                    classLabel = secondDict[key]
+        if key[0] == ">":
+            if float(testVec[featIndex]) >= float(key[1:]):
+                if type(secondDict[key]).__name__ == 'dict':
+                    classLabel = classify(secondDict[key], featLabels, testVec)
+                else:
+                    classLabel = secondDict[key]
         if testVec[featIndex] == key:
             if type(secondDict[key]).__name__ == 'dict':
                 classLabel = classify(secondDict[key], featLabels, testVec)
