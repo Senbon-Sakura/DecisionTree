@@ -69,6 +69,27 @@ def splitDataSet(dataArr, featInd):
         featSplit[featVec[featInd]].append(tmp)
     return featSplit
 
+# 根据第i个特征(连续值)进行划分，返回划分的字典类型
+def splitContinueDataSet(dataArr, featInd, val):
+    key1 = ("<%s" % str(val))
+    key2 = (">%s" % str(val))
+    featSplit = {key1:[], key2:[]}
+    for featVec in dataArr:
+        tmp = np.hstack((featVec[:featInd], featVec[featInd + 1:]))
+        if float(featVec[featInd]) < val:
+            featSplit[key1].append(tmp)
+        else:
+            featSplit[key2].append(tmp)
+    return featSplit
+
+
+
+
+
+
+
+
+
 # 计算C.54决策树不同特征值增益率对应的分母IV(a)
 def calcIVa(dataArr):
     numOfFeat = dataArr.shape[1]-1                      # 计算dataArr中Feature的个数，最后一个为label需要减去
@@ -90,24 +111,45 @@ def chooseBestFeatureToSplit(dataArr, classDict):
     numOfFeature = len(dataArr[0])-1                    # 计算dataArr中Feature的个数，最后一个为label需要减去
     numOfSample = len(dataArr)                          # 计算样本总数，用于计算信息熵
     originInfoEnt = InfoEntropy(dataArr)                # 计算划分之前的信息熵
-    bestInfoEnt = originInfoEnt                         # 保存最佳的信息熵，越小越好
+    bestInfoEntGain = 0                                 # 保存最佳的信息熵，越小越好
     bestFeatIndex = 0                                   # 保存最好划分的feature序号
     bestfeatSpitDict = {}                               # 保存最好划分的划分结果
     for featInd in range(numOfFeature):                 # 遍历dataArr中的每一个Feature
-        featSplit = splitDataSet(dataArr, featInd)      # 根据当前featInd划分dataArr，返回划分的字典结果
-        infoEnt = 0
-        for key in featSplit.keys():                    # 计算信息熵
-            prob = len(featSplit[key]) / numOfSample
-            infoEnt += prob*InfoEntropy(featSplit[key])
-        if infoEnt < bestInfoEnt:                       # 如果新划分的信息熵小于最有信息熵，则将最优结果更新为此次划分结果
-            bestInfoEnt = infoEnt
-            bestFeatIndex = featInd
-            bestfeatSpitDict = featSplit
-    infoEntGain = originInfoEnt - bestInfoEnt           # 计算最大的信息增益
+        if len(np.unique(dataArr[:,featInd])) < 5:      # 处理离散值
+            featSplit = splitDataSet(dataArr, featInd)      # 根据当前featInd划分dataArr，返回划分的字典结果
+            infoEnt = 0
+            for key in featSplit.keys():                    # 计算信息熵
+                prob = len(featSplit[key]) / numOfSample
+                infoEnt += prob*InfoEntropy(featSplit[key])
+            infoGain = originInfoEnt - infoEnt
+            if infoGain > bestInfoEntGain:                       # 如果新划分的信息熵增益大于最优信息熵增益，则将最优结果更新为此次划分结果
+                bestInfoEntGain = originInfoEnt - infoEnt
+                bestFeatIndex = featInd
+                bestfeatSpitDict = featSplit
+        else:
+            sortVals = sorted(np.unique(np.array(dataArr[:, featInd], dtype='float')))
+            splitVals = []
+            bestInfoEntGainLocal = 0
+            for i in range(len(sortVals)-1):
+                splitVals.append( (sortVals[i] + sortVals[i+1]) / 2 )
+            for val in splitVals:
+                featSplit = splitContinueDataSet(dataArr, featInd, val)
+                infoEnt = 0
+                for key in featSplit.keys():
+                    prob = len(featSplit[key]) / numOfSample
+                    infoEnt += prob*InfoEntropy(featSplit[key])
+                if originInfoEnt - infoEnt > bestInfoEntGainLocal:                       # 如果新划分的信息熵增益大于最优信息熵增益，则将最优结果更新为此次划分结果
+                    bestInfoEntGainLocal = originInfoEnt - infoEnt
+                    bestFeatIndexLocal = val
+                    bestfeatSpitDictLocal = featSplit
+            if bestInfoEntGainLocal > bestInfoEntGain:  # 如果新划分的信息熵增益大于最优信息熵增益，则将最优结果更新为此次划分结果
+                bestInfoEntGain = bestInfoEntGainLocal
+                bestFeatIndex = featInd
+                bestfeatSpitDict = bestfeatSpitDictLocal
     keyList = list(classDict.keys())
     bestClassName = keyList[bestFeatIndex]              # 返回当作当前数节点的值
     classDict.pop(bestClassName)
-    return infoEntGain, bestFeatIndex, bestfeatSpitDict, bestClassName, classDict
+    return bestInfoEntGain, bestFeatIndex, bestfeatSpitDict, bestClassName, classDict
 
 
 # 选择信息增益高于平均水平的feature
@@ -210,9 +252,10 @@ def DecisionTree(dataArr, classDict):
         myTree = {bestClassName:{}}
         for key in bestfeatSplitDict.keys():
             myTree[bestClassName][key] = DecisionTree(np.array(bestfeatSplitDict[key]), classDictReturn.copy())
-        for featVal in classDict[bestClassName]:
-            if featVal not in bestfeatSplitDict.keys():
-                myTree[bestClassName][featVal] = maxLab
+        if len(classDict[bestClassName]) < 5:
+            for featVal in classDict[bestClassName]:
+                if featVal not in bestfeatSplitDict.keys():
+                    myTree[bestClassName][featVal] = maxLab
         return myTree
 
 # 由增益率生成决策树
